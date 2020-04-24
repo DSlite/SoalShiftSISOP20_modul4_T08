@@ -360,12 +360,19 @@ static int _mkdir(const char *path, mode_t mode)
 	char fpath[1000];
 	changePath(fpath, path, 1, 0);
 
+  char *ptr = strrchr(path, '/');
+  char *filePtr = strstr(ptr, "/encv1_");
+  if (filePtr != NULL) {
+    if (filePtr - ptr == 0) {
+      const char *desc[] = {path};
+      logFile("SPECIAL", "ENCV1", 0, 1, desc);
+    }
+  }
+
 	int res;
 
 	res = mkdir(fpath, mode);
 
-
-  // Soal 3
   char syncOrigPath[1000];
   char syncDirPath[1000];
   char syncFilePath[1000];
@@ -506,11 +513,20 @@ static int _rename(const char *from, const char *to)
   if (toStartPtr != NULL) {
     if (toStartPtr - toPtr == 0) {
       splitter(ffrom);
+      const char *desc[] = {fto};
+      logFile("SPECIAL", "ENCV2", 0, 1, desc);
     }
   }
   if (fromStartPtr != NULL) {
     if (fromStartPtr - fromPtr == 0) {
       unsplitter(ffrom);
+    }
+  }
+  toStartPtr = strstr(toPtr, "/encv1_");
+  if (toStartPtr != NULL) {
+    if (toStartPtr - toPtr == 0) {
+      const char *desc[] = {fto};
+      logFile("SPECIAL", "ENCV1", 0, 1, desc);
     }
   }
 
