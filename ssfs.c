@@ -10,7 +10,7 @@
 #include <time.h>
 
 static const char *dirpath = "/home/umum/Documents/SisOpLab/FUSE";
-// static const char *key = "9(ku@AW1[Lmvgax6q`5Y2Ry?+sF!^HKQiBXCUSe&0M.b%rI'7d)o4~VfZ*{#:}ETt$3J-zpc]lnh8,GwP_ND|jO";
+static const char *key = "9(ku@AW1[Lmvgax6q`5Y2Ry?+sF!^HKQiBXCUSe&0M.b%rI'7d)o4~VfZ*{#:}ETt$3J-zpc]lnh8,GwP_ND|jO";
 
 void getFileName(char buff[], char *fpath) {
   char *token = strtok(fpath, "/");
@@ -22,8 +22,8 @@ void getFileName(char buff[], char *fpath) {
 
 void getDirAndFile(char *dir, char *file, char *path) {
   char buff[1000];
-  memset(dir, 0, strlen(dir));
-  memset(file, 0, strlen(file));
+  memset(dir, 0, 1000);
+  memset(file, 0, 1000);
   strcpy(buff, path);
   char *token = strtok(buff, "/");
   while(token != NULL) {
@@ -35,10 +35,23 @@ void getDirAndFile(char *dir, char *file, char *path) {
   }
 }
 
+void decrypt(char *path, int isEncrypt) {
+  char *cursor = path;
+  while (cursor-path < strlen(path)) {
+    char *ptr = strchr(key, *cursor);
+    if (ptr != NULL) {
+      int index = (ptr-key+strlen(key)-10)%strlen(key);
+      if (isEncrypt) index = (ptr-key+strlen(key)+10)%strlen(key);
+      *cursor = *(key+index);
+    }
+    cursor++;
+  }
+}
+
 void nextSync(char *syncDirPath) {
   char buff[1000];
   char construct[1000];
-  memset(construct, 0, strlen(construct));
+  memset(construct, 0, sizeof(construct));
   strcpy(buff, syncDirPath);
   int state = 0;
   char *token = strtok(buff, "/");
@@ -59,15 +72,68 @@ void nextSync(char *syncDirPath) {
     sprintf(construct, "%s/%s", construct, get);
     token = strtok(NULL, "/");
   }
-  memset(syncDirPath, 0, strlen(syncDirPath));
+  memset(syncDirPath, 0, 1000);
   sprintf(syncDirPath, "%s", construct);
 }
 
-void changePath(char *fpath, const char *path) {
+// void changePath(char *fpath, const char *path) {
+//   if (strcmp(path, "/") == 0) {
+//     sprintf(fpath, "%s", dirpath);
+//   } else {
+//     sprintf(fpath, "%s%s", dirpath, path);
+//   }
+// }
+
+void changePath(char *fpath, const char *path, int isWriteOper, int isFileAsked) {
+  char *ptr = strstr(path, "/encv1_");
+  int state = 0;
+  if (ptr != NULL) {
+    if (strstr(ptr+1, "/") != NULL) state = 1;
+  }
+  char fixPath[1000];
+  memset(fixPath, 0, sizeof(fixPath));
+  if (ptr != NULL && state) {
+    ptr = strstr(ptr+1, "/");
+    char pathEncvDirBuff[1000];
+    char pathEncryptedBuff[1000];
+    strcpy(pathEncryptedBuff, ptr);
+    strncpy(pathEncvDirBuff, path, ptr-path);
+    if (isWriteOper) {
+      char pathFileBuff[1000];
+      char pathDirBuff[1000];
+      getDirAndFile(pathDirBuff, pathFileBuff, pathEncryptedBuff);
+      decrypt(pathDirBuff, 0);
+      sprintf(fixPath, "%s%s/%s", pathEncvDirBuff, pathDirBuff, pathFileBuff);
+    } else if (isFileAsked) {
+      char pathFileBuff[1000];
+      char pathDirBuff[1000];
+      char pathExtBuff[1000];
+      getDirAndFile(pathDirBuff, pathFileBuff, pathEncryptedBuff);
+      char *whereIsExtension = strrchr(pathFileBuff, '.');
+      if (whereIsExtension-pathFileBuff <= 1) {
+        decrypt(pathDirBuff, 0);
+        decrypt(pathFileBuff, 0);
+        sprintf(fixPath, "%s%s/%s", pathEncvDirBuff, pathDirBuff, pathFileBuff);
+      } else {
+        char pathJustFileBuff[1000];
+        memset(pathJustFileBuff, 0, sizeof(pathJustFileBuff));
+        strcpy(pathExtBuff, whereIsExtension);
+        snprintf(pathJustFileBuff, whereIsExtension-pathFileBuff+1, "%s", pathFileBuff);
+        decrypt(pathDirBuff, 0);
+        decrypt(pathJustFileBuff, 0);
+        sprintf(fixPath, "%s%s/%s%s", pathEncvDirBuff, pathDirBuff, pathJustFileBuff, pathExtBuff);
+      }
+    } else {
+      decrypt(pathEncryptedBuff, 0);
+      sprintf(fixPath, "%s%s", pathEncvDirBuff, pathEncryptedBuff);
+    }
+  } else {
+    strcpy(fixPath, path);
+  }
   if (strcmp(path, "/") == 0) {
     sprintf(fpath, "%s", dirpath);
   } else {
-    sprintf(fpath, "%s%s", dirpath, path);
+    sprintf(fpath, "%s%s", dirpath, fixPath);
   }
 }
 
@@ -93,8 +159,13 @@ void logFile(char *level, char *cmd, int res, int lenDesc, const char *desc[]) {
 
 static int _getattr(const char *path, struct stat *stbuf)
 {
+
 	char fpath[1000];
-	changePath(fpath, path);
+  changePath(fpath, path, 0, 1);
+  if (access(fpath, F_OK) == -1) {
+    memset(fpath, 0, sizeof(fpath));
+    changePath(fpath, path, 0, 0);
+  }
 
 	int res;
 
@@ -112,7 +183,11 @@ static int _getattr(const char *path, struct stat *stbuf)
 static int _access(const char *path, int mask)
 {
 	char fpath[1000];
-	changePath(fpath, path);
+	changePath(fpath, path, 0, 1);
+  if (access(fpath, F_OK) == -1) {
+    memset(fpath, 0, 1000);
+    changePath(fpath, path, 0, 0);
+  }
 
 	int res;
 
@@ -130,7 +205,7 @@ static int _access(const char *path, int mask)
 static int _readlink(const char *path, char *buf, size_t size)
 {
 	char fpath[1000];
-	changePath(fpath, path);
+	changePath(fpath, path, 0, 1);
 
 	int res;
 
@@ -150,7 +225,7 @@ static int _readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 		       off_t offset, struct fuse_file_info *fi)
 {
 	char fpath[1000];
-	changePath(fpath, path);
+	changePath(fpath, path, 0, 0);
 
 	DIR *dp;
 	struct dirent *de;
@@ -170,7 +245,31 @@ static int _readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 		memset(&st, 0, sizeof(st));
 		st.st_ino = de->d_ino;
 		st.st_mode = de->d_type << 12;
-		if (filler(buf, de->d_name, &st, 0)) break;
+    if (strcmp(de->d_name, ".") == 0 || strcmp(de->d_name, "..") == 0) {
+    } else if (strstr(path, "/encv1_") != NULL) {
+      char encryptThis[1000];
+      strcpy(encryptThis, de->d_name);
+      if (de->d_type == DT_REG) {
+        char *whereIsExtension = strrchr(encryptThis, '.');
+        if (whereIsExtension-encryptThis <= 1) {
+          decrypt(encryptThis, 1);
+        } else {
+          char pathFileBuff[1000];
+          char pathExtBuff[1000];
+          strcpy(pathExtBuff, whereIsExtension);
+          snprintf(pathFileBuff, whereIsExtension-encryptThis+1, "%s", encryptThis);
+          decrypt(pathFileBuff, 1);
+          memset(encryptThis, 0, sizeof(encryptThis));
+          sprintf(encryptThis, "%s%s", pathFileBuff, pathExtBuff);
+        }
+      } else if (de->d_type == DT_DIR) {
+        decrypt(encryptThis, 1);
+      }
+
+  		if (filler(buf, encryptThis, &st, 0)) break;
+    } else {
+      if (filler(buf, de->d_name, &st, 0)) break;
+    }
 	}
 
   const char *desc[] = {path};
@@ -183,7 +282,7 @@ static int _readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 static int _mkdir(const char *path, mode_t mode)
 {
 	char fpath[1000];
-	changePath(fpath, path);
+	changePath(fpath, path, 1, 0);
 
 	int res;
 
@@ -194,24 +293,24 @@ static int _mkdir(const char *path, mode_t mode)
   char syncOrigPath[1000];
   char syncDirPath[1000];
   char syncFilePath[1000];
-  memset(syncOrigPath, 0, strlen(syncOrigPath));
+  memset(syncOrigPath, 0, sizeof(syncOrigPath));
   strcpy(syncOrigPath, path);
   getDirAndFile(syncDirPath, syncFilePath, syncOrigPath);
-  memset(syncOrigPath, 0, strlen(syncOrigPath));
+  memset(syncOrigPath, 0, sizeof(syncOrigPath));
   strcpy(syncOrigPath, syncDirPath);
   do {
     char syncPath[1000];
-    memset(syncPath, 0, strlen(syncPath));
+    memset(syncPath, 0, sizeof(syncPath));
     nextSync(syncDirPath);
     if (strcmp(syncDirPath, syncOrigPath) == 0) break;
-    changePath(syncPath, syncDirPath);
+    changePath(syncPath, syncDirPath, 1, 0);
     if (access(syncPath, F_OK) == -1) continue;
     sprintf(syncPath, "%s/%s", syncPath, syncFilePath);
     mkdir(syncPath, mode);
   } while (1);
 
 
-  const char *desc[] = {path};
+  const char *desc[] = {fpath};
   logFile("INFO", "MKDIR", res, 1, desc);
 
 	if (res == -1) return -errno;
@@ -222,7 +321,7 @@ static int _mkdir(const char *path, mode_t mode)
 static int _unlink(const char *path)
 {
 	char fpath[1000];
-	changePath(fpath, path);
+	changePath(fpath, path, 0, 1);
 
 	int res;
 
@@ -231,17 +330,17 @@ static int _unlink(const char *path)
   char syncOrigPath[1000];
   char syncDirPath[1000];
   char syncFilePath[1000];
-  memset(syncOrigPath, 0, strlen(syncOrigPath));
+  memset(syncOrigPath, 0, sizeof(syncOrigPath));
   strcpy(syncOrigPath, path);
   getDirAndFile(syncDirPath, syncFilePath, syncOrigPath);
-  memset(syncOrigPath, 0, strlen(syncOrigPath));
+  memset(syncOrigPath, 0, sizeof(syncOrigPath));
   strcpy(syncOrigPath, syncDirPath);
   do {
     char syncPath[1000];
-    memset(syncPath, 0, strlen(syncPath));
+    memset(syncPath, 0, sizeof(syncPath));
     nextSync(syncDirPath);
     if (strcmp(syncDirPath, syncOrigPath) == 0) break;
-    changePath(syncPath, syncDirPath);
+    changePath(syncPath, syncDirPath, 0, 1);
     if (access(syncPath, F_OK) == -1) continue;
     sprintf(syncPath, "%s/%s", syncPath, syncFilePath);
     unlink(syncPath);
@@ -258,7 +357,7 @@ static int _unlink(const char *path)
 static int _rmdir(const char *path)
 {
 	char fpath[1000];
-	changePath(fpath, path);
+	changePath(fpath, path, 0, 0);
 	int res;
 
 	res = rmdir(fpath);
@@ -266,17 +365,17 @@ static int _rmdir(const char *path)
   char syncOrigPath[1000];
   char syncDirPath[1000];
   char syncFilePath[1000];
-  memset(syncOrigPath, 0, strlen(syncOrigPath));
+  memset(syncOrigPath, 0, sizeof(syncOrigPath));
   strcpy(syncOrigPath, path);
   getDirAndFile(syncDirPath, syncFilePath, syncOrigPath);
-  memset(syncOrigPath, 0, strlen(syncOrigPath));
+  memset(syncOrigPath, 0, sizeof(syncOrigPath));
   strcpy(syncOrigPath, syncDirPath);
   do {
     char syncPath[1000];
-    memset(syncPath, 0, strlen(syncPath));
+    memset(syncPath, 0, sizeof(syncPath));
     nextSync(syncDirPath);
     if (strcmp(syncDirPath, syncOrigPath) == 0) break;
-    changePath(syncPath, syncDirPath);
+    changePath(syncPath, syncDirPath, 0, 0);
     if (access(syncPath, F_OK) == -1) continue;
     sprintf(syncPath, "%s/%s", syncPath, syncFilePath);
     rmdir(syncPath);
@@ -294,8 +393,8 @@ static int _symlink(const char *from, const char *to)
 {
 	char ffrom[1000];
 	char fto[1000];
-	changePath(ffrom, from);
-	changePath(fto, to);
+	changePath(ffrom, from, 0, 1);
+	changePath(fto, to, 0, 1);
 
 	int res;
 
@@ -313,8 +412,16 @@ static int _rename(const char *from, const char *to)
 {
 	char ffrom[1000];
 	char fto[1000];
-	changePath(ffrom, from);
-	changePath(fto, to);
+	changePath(ffrom, from, 0, 1);
+	changePath(fto, to, 0, 1);
+  if (access(ffrom, F_OK) == -1) {
+    memset(ffrom, 0, sizeof(ffrom));
+    changePath(ffrom, from, 0, 0);
+  }
+  if (access(fto, F_OK) == -1) {
+    memset(fto, 0, sizeof(fto));
+    changePath(fto, to, 0, 0);
+  }
 
 	int res;
 
@@ -332,8 +439,8 @@ static int _link(const char *from, const char *to)
 {
 	char ffrom[1000];
 	char fto[1000];
-	changePath(ffrom, from);
-	changePath(fto, to);
+	changePath(ffrom, from, 0, 1);
+	changePath(fto, to, 0, 1);
 
 	int res;
 
@@ -350,7 +457,11 @@ static int _link(const char *from, const char *to)
 static int _chmod(const char *path, mode_t mode)
 {
 	char fpath[1000];
-	changePath(fpath, path);
+	changePath(fpath, path, 0, 1);
+  if (access(fpath, F_OK) == -1) {
+    memset(fpath, 0, sizeof(fpath));
+    changePath(fpath, path, 0, 0);
+  }
 
 	int res;
 
@@ -369,7 +480,11 @@ static int _chmod(const char *path, mode_t mode)
 static int _chown(const char *path, uid_t uid, gid_t gid)
 {
 	char fpath[1000];
-	changePath(fpath, path);
+  changePath(fpath, path, 0, 1);
+  if (access(fpath, F_OK) == -1) {
+    memset(fpath, 0, sizeof(fpath));
+    changePath(fpath, path, 0, 0);
+  }
 
 	int res;
 
@@ -390,7 +505,11 @@ static int _chown(const char *path, uid_t uid, gid_t gid)
 static int _truncate(const char *path, off_t size)
 {
 	char fpath[1000];
-	changePath(fpath, path);
+  changePath(fpath, path, 0, 1);
+  if (access(fpath, F_OK) == -1) {
+    memset(fpath, 0, sizeof(fpath));
+    changePath(fpath, path, 0, 0);
+  }
 
 	int res;
 
@@ -407,7 +526,11 @@ static int _truncate(const char *path, off_t size)
 static int _utimens(const char *path, const struct timespec ts[2])
 {
 	char fpath[1000];
-	changePath(fpath, path);
+  changePath(fpath, path, 0, 1);
+  if (access(fpath, F_OK) == -1) {
+    memset(fpath, 0, sizeof(fpath));
+    changePath(fpath, path, 0, 0);
+  }
 
 	int res;
 
@@ -426,7 +549,7 @@ static int _create(const char *path, mode_t mode,
 		      struct fuse_file_info *fi)
 {
 	char fpath[1000];
-	changePath(fpath, path);
+  changePath(fpath, path, 1, 0);
 
 	int res;
 
@@ -435,17 +558,17 @@ static int _create(const char *path, mode_t mode,
   char syncOrigPath[1000];
   char syncDirPath[1000];
   char syncFilePath[1000];
-  memset(syncOrigPath, 0, strlen(syncOrigPath));
+  memset(syncOrigPath, 0, sizeof(syncOrigPath));
   strcpy(syncOrigPath, path);
   getDirAndFile(syncDirPath, syncFilePath, syncOrigPath);
-  memset(syncOrigPath, 0, strlen(syncOrigPath));
+  memset(syncOrigPath, 0, sizeof(syncOrigPath));
   strcpy(syncOrigPath, syncDirPath);
   do {
     char syncPath[1000];
-    memset(syncPath, 0, strlen(syncPath));
+    memset(syncPath, 0, sizeof(syncPath));
     nextSync(syncDirPath);
     if (strcmp(syncDirPath, syncOrigPath) == 0) break;
-    changePath(syncPath, syncDirPath);
+    changePath(syncPath, syncDirPath, 0, 1);
     if (access(syncPath, F_OK) == -1) continue;
     sprintf(syncPath, "%s/%s", syncPath, syncFilePath);
     close(open(syncPath, fi->flags, mode));
@@ -463,7 +586,8 @@ static int _create(const char *path, mode_t mode,
 static int _open(const char *path, struct fuse_file_info *fi)
 {
 	char fpath[1000];
-	changePath(fpath, path);
+  changePath(fpath, path, 0, 1);
+
 	int res;
 
 	res = open(fpath, fi->flags);
@@ -481,7 +605,7 @@ static int _read(const char *path, char *buf, size_t size, off_t offset,
 		    struct fuse_file_info *fi)
 {
 	char fpath[1000];
-	changePath(fpath, path);
+	changePath(fpath, path, 0, 1);
 
 	int fd;
 	int res;
@@ -506,7 +630,7 @@ static int _write(const char *path, const char *buf, size_t size,
 		     off_t offset, struct fuse_file_info *fi)
 {
 	char fpath[1000];
-	changePath(fpath, path);
+	changePath(fpath, path, 1, 0);
 
 	int fd;
 	int res;
@@ -522,18 +646,18 @@ static int _write(const char *path, const char *buf, size_t size,
   char syncOrigPath[1000];
   char syncDirPath[1000];
   char syncFilePath[1000];
-  memset(syncOrigPath, 0, strlen(syncOrigPath));
+  memset(syncOrigPath, 0, sizeof(syncOrigPath));
   strcpy(syncOrigPath, path);
   getDirAndFile(syncDirPath, syncFilePath, syncOrigPath);
-  memset(syncOrigPath, 0, strlen(syncOrigPath));
+  memset(syncOrigPath, 0, sizeof(syncOrigPath));
   strcpy(syncOrigPath, syncDirPath);
   do {
     char syncPath[1000];
     int syncFd;
-    memset(syncPath, 0, strlen(syncPath));
+    memset(syncPath, 0, sizeof(syncPath));
     nextSync(syncDirPath);
     if (strcmp(syncDirPath, syncOrigPath) == 0) break;
-    changePath(syncPath, syncDirPath);
+    changePath(syncPath, syncDirPath, 0, 1);
     if (access(syncPath, F_OK) == -1) continue;
     sprintf(syncPath, "%s/%s", syncPath, syncFilePath);
     syncFd = open(syncPath, O_WRONLY);
@@ -554,7 +678,7 @@ static int _write(const char *path, const char *buf, size_t size,
 static int _statfs(const char *path, struct statvfs *stbuf)
 {
 	char fpath[1000];
-	changePath(fpath, path);
+	changePath(fpath, path, 0, 1);
 	int res;
 
 	res = statvfs(fpath, stbuf);
