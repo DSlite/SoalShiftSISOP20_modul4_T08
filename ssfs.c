@@ -12,14 +12,6 @@
 static const char *dirpath = "/home/umum/Documents/SisOpLab/FUSE";
 static const char *key = "9(ku@AW1[Lmvgax6q`5Y2Ry?+sF!^HKQiBXCUSe&0M.b%rI'7d)o4~VfZ*{#:}ETt$3J-zpc]lnh8,GwP_ND|jO";
 
-void getFileName(char buff[], char *fpath) {
-  char *token = strtok(fpath, "/");
-  while (token != NULL) {
-    sprintf(buff, "%s", token);
-    token = strtok(NULL, "/");
-  }
-}
-
 void getDirAndFile(char *dir, char *file, char *path) {
   char buff[1000];
   memset(dir, 0, 1000);
@@ -76,14 +68,6 @@ void nextSync(char *syncDirPath) {
   sprintf(syncDirPath, "%s", construct);
 }
 
-// void changePath(char *fpath, const char *path) {
-//   if (strcmp(path, "/") == 0) {
-//     sprintf(fpath, "%s", dirpath);
-//   } else {
-//     sprintf(fpath, "%s%s", dirpath, path);
-//   }
-// }
-
 void changePath(char *fpath, const char *path, int isWriteOper, int isFileAsked) {
   char *ptr = strstr(path, "/encv1_");
   int state = 0;
@@ -134,6 +118,98 @@ void changePath(char *fpath, const char *path, int isWriteOper, int isFileAsked)
     sprintf(fpath, "%s", dirpath);
   } else {
     sprintf(fpath, "%s%s", dirpath, fixPath);
+  }
+}
+
+void splitter(char *path) {
+  DIR *dp;
+  struct dirent *de;
+  dp = opendir(path);
+  while ((de = readdir(dp)) != NULL) {
+    if (strcmp(de->d_name, ".") == 0 || strcmp(de->d_name, "..") == 0) continue;
+    char newPath[1000];
+    sprintf(newPath, "%s/%s", path, de->d_name);
+    if (de->d_type == DT_DIR) {
+      splitter(newPath);
+    }
+    if (de->d_type == DT_REG) {
+      FILE *pathFilePointer = fopen(newPath, "rb");
+      fseek(pathFilePointer, 0, SEEK_END);
+      long pathFileSize = ftell(pathFilePointer);
+      rewind(pathFilePointer);
+      struct stat st;
+      lstat(newPath, &st);
+      int index = 0;
+      while(pathFileSize > 0) {
+        char newFileSplit[1000];
+        char buff[1024];
+        sprintf(newFileSplit, "%s.%03d", newPath, index++);
+        close(creat(newFileSplit, st.st_mode));
+        int size;
+        if (pathFileSize >= 1024) {
+          size = 1024;
+          pathFileSize-=1024;
+        } else {
+          size = pathFileSize;
+          pathFileSize = 0;
+        }
+        memset(buff, 0, sizeof(buff));
+        fread(buff, 1, size, pathFilePointer);
+
+        FILE *pathFileOut = fopen(newFileSplit, "wb");
+        fwrite(buff, 1, size, pathFileOut);
+        fclose(pathFileOut);
+      }
+      fclose(pathFilePointer);
+      unlink(newPath);
+    }
+  }
+}
+
+void unsplitter(char *path) {
+  DIR *dp;
+  struct dirent *de;
+  dp = opendir(path);
+  while ((de = readdir(dp)) != NULL) {
+    if (strcmp(de->d_name, ".") == 0 || strcmp(de->d_name, "..") == 0) continue;
+    if (de->d_type == DT_DIR) {
+      char newPath[1000];
+      sprintf(newPath, "%s/%s", path, de->d_name);
+      unsplitter(newPath);
+    }
+    if (de->d_type == DT_REG) {
+      char *ptr = strrchr(de->d_name, '.');
+      if (strcmp(ptr, ".000") != 0) continue;
+      char pathFileName[1000];
+      char pathToFile[1000];
+      snprintf(pathFileName, ptr-(de->d_name)+1, "%s", de->d_name);
+      printf("%s\n", pathFileName);
+      sprintf(pathToFile, "%s/%s", path, pathFileName);
+
+      char temp[1000];
+      sprintf(temp, "%s.000", pathToFile);
+      struct stat st;
+      lstat(temp, &st);
+      close(creat(pathToFile, st.st_mode));
+
+      int index = 0;
+      FILE *pathFilePointer = fopen(pathToFile, "wb");
+      while (1) {
+        char partName[1000];
+        sprintf(partName, "%s.%03d", pathToFile, index++);
+        if (access(partName, F_OK) == -1) break;
+        FILE *pathToPart = fopen(partName, "rb");
+        fseek(pathToPart, 0, SEEK_END);
+        long pathFileSize = ftell(pathToPart);
+        rewind(pathToPart);
+        char buff[1024];
+        fread(buff, 1, pathFileSize, pathToPart);
+        fwrite(buff, 1, pathFileSize, pathFilePointer);
+        fclose(pathToPart);
+        unlink(partName);
+      }
+      fclose(pathFilePointer);
+    }
   }
 }
 
@@ -245,8 +321,8 @@ static int _readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 		memset(&st, 0, sizeof(st));
 		st.st_ino = de->d_ino;
 		st.st_mode = de->d_type << 12;
-    if (strcmp(de->d_name, ".") == 0 || strcmp(de->d_name, "..") == 0) {
-    } else if (strstr(path, "/encv1_") != NULL) {
+    if (strcmp(de->d_name, ".") == 0 || strcmp(de->d_name, "..") == 0) continue;
+    if (strstr(path, "/encv1_") != NULL) {
       char encryptThis[1000];
       strcpy(encryptThis, de->d_name);
       if (de->d_type == DT_REG) {
@@ -421,6 +497,21 @@ static int _rename(const char *from, const char *to)
   if (access(fto, F_OK) == -1) {
     memset(fto, 0, sizeof(fto));
     changePath(fto, to, 0, 0);
+  }
+
+  char *toPtr = strrchr(to, '/');
+  char *fromPtr = strrchr(from ,'/');
+  char *toStartPtr = strstr(toPtr, "/encv2_");
+  char *fromStartPtr = strstr(fromPtr, "/encv2_");
+  if (toStartPtr != NULL) {
+    if (toStartPtr - toPtr == 0) {
+      splitter(ffrom);
+    }
+  }
+  if (fromStartPtr != NULL) {
+    if (fromStartPtr - fromPtr == 0) {
+      unsplitter(ffrom);
+    }
   }
 
 	int res;
