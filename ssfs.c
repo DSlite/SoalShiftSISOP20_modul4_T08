@@ -11,6 +11,7 @@
 
 static const char *dirpath = "/home/umum/Documents/SisOpLab/FUSE";
 static const char *key = "9(ku@AW1[Lmvgax6q`5Y2Ry?+sF!^HKQiBXCUSe&0M.b%rI'7d)o4~VfZ*{#:}ETt$3J-zpc]lnh8,GwP_ND|jO";
+static const char *logpath = "/home/umum/Documents/SisOpLab/fuse_log.txt";
 
 void getDirAndFile(char *dir, char *file, char *path) {
   char buff[1000];
@@ -214,7 +215,7 @@ void unsplitter(char *path) {
 }
 
 void logFile(char *level, char *cmd, int res, int lenDesc, const char *desc[]) {
-  FILE *f = fopen("/home/umum/Documents/SisOpLab/fuse_log.txt", "a");
+  FILE *f = fopen(logpath, "a");
   time_t t;
   struct tm *tmp;
   char timeBuff[100];
@@ -393,7 +394,7 @@ static int _mkdir(const char *path, mode_t mode)
   } while (1);
 
 
-  const char *desc[] = {fpath};
+  const char *desc[] = {path};
   logFile("INFO", "MKDIR", res, 1, desc);
 
 	if (res == -1) return -errno;
