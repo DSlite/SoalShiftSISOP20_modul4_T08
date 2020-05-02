@@ -95,7 +95,7 @@ void changePath(char *fpath, const char *path, int isWriteOper, int isFileAsked)
       char pathExtBuff[1000];
       getDirAndFile(pathDirBuff, pathFileBuff, pathEncryptedBuff);
       char *whereIsExtension = strrchr(pathFileBuff, '.');
-      if (whereIsExtension-pathFileBuff <= 1) {
+      if (whereIsExtension-pathFileBuff < 1) {
         decrypt(pathDirBuff, 0);
         decrypt(pathFileBuff, 0);
         sprintf(fixPath, "%s%s/%s", pathEncvDirBuff, pathDirBuff, pathFileBuff);
@@ -184,7 +184,6 @@ void unsplitter(char *path) {
       char pathFileName[1000];
       char pathToFile[1000];
       snprintf(pathFileName, ptr-(de->d_name)+1, "%s", de->d_name);
-      printf("%s\n", pathFileName);
       sprintf(pathToFile, "%s/%s", path, pathFileName);
 
       char temp[1000];
@@ -328,7 +327,7 @@ static int _readdir(const char *path, void *buf, fuse_fill_dir_t filler,
       strcpy(encryptThis, de->d_name);
       if (de->d_type == DT_REG) {
         char *whereIsExtension = strrchr(encryptThis, '.');
-        if (whereIsExtension-encryptThis <= 1) {
+        if (whereIsExtension-encryptThis < 1) {
           decrypt(encryptThis, 1);
         } else {
           char pathFileBuff[1000];
@@ -513,14 +512,22 @@ static int _rename(const char *from, const char *to)
   char *fromStartPtr = strstr(fromPtr, "/encv2_");
   if (toStartPtr != NULL) {
     if (toStartPtr - toPtr == 0) {
-      splitter(ffrom);
-      const char *desc[] = {fto};
-      logFile("SPECIAL", "ENCV2", 0, 1, desc);
+      DIR *d = opendir(ffrom)
+      if (d) {
+        closedir(d);
+        splitter(ffrom);
+        const char *desc[] = {fto};
+        logFile("SPECIAL", "ENCV2", 0, 1, desc);
+      }
     }
   }
   if (fromStartPtr != NULL) {
     if (fromStartPtr - fromPtr == 0) {
-      unsplitter(ffrom);
+      DIR *d = opendir(ffrom);
+      if (d) {
+        closedir(d);
+        unsplitter(ffrom);
+      }
     }
   }
   toStartPtr = strstr(toPtr, "/encv1_");
