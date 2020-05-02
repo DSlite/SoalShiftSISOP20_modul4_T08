@@ -85,7 +85,7 @@ Seperti yang dijelaskan pada asumsi soal, maka kami membuat beberapa fungsi yang
 * [`decrypt()`](#fungsi-decrypt): Fungsi untuk melakukan dekripsi dan enkripsi menggunakan metode caesar cipher dengan `key` yang telah dideklarasi.
 * [`getDirAndFile()`](#fungsi-getdirandfile): Fungsi untuk mendapatkan `directory` dan `filename` dari `path` yang diinputkan.
 * [`changePath()`](#fungsi-changepath): Fungsi untuk mengganti `path` yang diinputkan menjadi **mount-point** yang telah diset. Fungsi ini juga berfungsi untuk mengecek apakah perlu dilakukan dekripsi (directory berawalan `/encv_1`) pada `path` yang diinputkan.
-Dan juga untuk melakukan enkripsi, kami melakukannya langsung pada *system-call* [`_reddir()`](#system-call-readdir).
+Dan juga untuk melakukan enkripsi, kami melakukannya langsung pada *system-call* [`_readdir()`](#system-call-readdir).
 
 #### Fungsi decrypt
 
