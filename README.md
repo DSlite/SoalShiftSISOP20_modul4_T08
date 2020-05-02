@@ -5,18 +5,13 @@ Kelompok T08
   * Muhammad Irsyad Ali (05311840000041)
 
 ---
+
 ## Table of Contents
 * [Pendahuluan](#pendahuluan)
 * [Soal 1](#soal-1)
 * [Soal 2](#soal-2)
 * [Soal 3](#soal-3)
 * [Soal 4](#soal-4)
-
-**belum**
-* [belum_syscal_apaja_yangdipake_di_no.1](#belum-awal)
-* [belum_nextsync](#belum-1)
-* [belum_syscal_apaja_yangdipake_di_no.2](#belum-terakhir)
-* [belum_pembahasan_soal3](#belum-1)
 
 ---
 
